@@ -6,69 +6,79 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // ============================================================================
-// THUẬT TOÁN SIÊU CẤP VIP PRO - HỆ THỐNG 10 THUẬT TOÁN CON + 1 THUẬT TOÁN CHÍNH
-// PHÂN TÍCH ĐA CHIỀU - KHÔNG RANDOM - DỰA TRÊN DỮ LIỆU THỰC TẾ 100%
+// THUẬT TOÁN CÂN BẰNG TUYỆT ĐỐI - KHÔNG THIÊN VỊ
+// 10 THUẬT TOÁN CON + 1 THUẬT TOÁN CHÍNH
+// PHÂN TÍCH KHÁCH QUAN 100%
 // ============================================================================
 
 // ============================================================================
-// THUẬT TOÁN CON 1: NHẬN DIỆN CẦU
+// THUẬT TOÁN CON 1: NHẬN DIỆN CẦU (CÂN BẰNG)
 // ============================================================================
 class CauNhanDien {
     constructor(data) {
         this.data = data;
-        this.cauPhatHien = [];
+        this.cauPhatHien = {};
     }
 
     nhanDien() {
         const size = this.data.length;
-        if (size < 10) return [];
+        if (size < 10) return { cauHienTai: [], loaiCau: 'CHUA_DU_DU_LIEU' };
 
-        // Nhận diện cầu Tài/Xỉu
+        // Phân tích cầu hiện tại
         let cauHienTai = [];
-        let cauDangChay = [];
-        let cauDaiNhat = [];
-
-        for (let i = 0; i < size; i++) {
-            const side = this.data[i].side;
-            
-            if (i === 0) {
-                cauHienTai = [side];
+        let cauTai = 0;
+        let cauXiu = 0;
+        
+        for (let i = size - 1; i >= 0; i--) {
+            if (cauHienTai.length === 0) {
+                cauHienTai.push(this.data[i].side);
+                if (this.data[i].side === 'TAI') cauTai++;
+                else cauXiu++;
             } else {
-                if (side === this.data[i-1].side) {
-                    cauHienTai.push(side);
+                if (this.data[i].side === cauHienTai[0]) {
+                    cauHienTai.push(this.data[i].side);
+                    if (this.data[i].side === 'TAI') cauTai++;
+                    else cauXiu++;
                 } else {
-                    if (cauHienTai.length > 1) {
-                        cauDangChay.push([...cauHienTai]);
-                        if (cauHienTai.length > cauDaiNhat.length) {
-                            cauDaiNhat = [...cauHienTai];
-                        }
-                    }
-                    cauHienTai = [side];
+                    break;
                 }
             }
         }
 
-        // Lưu cầu cuối cùng
-        if (cauHienTai.length > 1) {
-            cauDangChay.push([...cauHienTai]);
-            if (cauHienTai.length > cauDaiNhat.length) {
-                cauDaiNhat = [...cauHienTai];
-            }
+        // Đếm tổng Tài/Xỉu trong toàn bộ dữ liệu
+        let tongTai = 0;
+        let tongXiu = 0;
+        this.data.forEach(d => {
+            if (d.side === 'TAI') tongTai++;
+            else tongXiu++;
+        });
+
+        // Cân bằng - không thiên vị
+        const tyLeTai = tongTai / size;
+        const tyLeXiu = tongXiu / size;
+        
+        let duDoan = 'CAN_BANG';
+        let doTinCay = 0;
+        
+        // Chỉ dự đoán khi có sự chênh lệch rõ ràng
+        if (Math.abs(tyLeTai - tyLeXiu) > 0.15) {
+            duDoan = tyLeTai > tyLeXiu ? 'TAI' : 'XIU';
+            doTinCay = Math.abs(tyLeTai - tyLeXiu);
         }
 
-        // Phân tích cầu
-        const cauPhanTich = {
-            cauHienTai: cauHienTai,
-            cauDangChay: cauDangChay,
-            cauDaiNhat: cauDaiNhat,
-            soLuongCau: cauDangChay.length,
-            cauCuoiCung: cauHienTai.length > 0 ? cauHienTai[0] : null,
-            doDaiCauHienTai: cauHienTai.length,
-            loaiCau: this.xacDinhLoaiCau(cauHienTai)
+        this.cauPhatHien = {
+            cauHienTai: cauHienTai.reverse(),
+            doDaiCau: cauHienTai.length,
+            loaiCau: this.xacDinhLoaiCau(cauHienTai),
+            tongTai: tongTai,
+            tongXiu: tongXiu,
+            tyLeTai: tyLeTai,
+            tyLeXiu: tyLeXiu,
+            duDoan: duDoan,
+            doTinCay: doTinCay
         };
 
-        this.cauPhatHien = cauPhanTich;
-        return cauPhanTich;
+        return this.cauPhatHien;
     }
 
     xacDinhLoaiCau(cau) {
@@ -77,7 +87,6 @@ class CauNhanDien {
         const isSame = cau.every(s => s === first);
         if (isSame) return 'CAU_DON';
         
-        // Kiểm tra cầu đan xen
         let isAlternate = true;
         for (let i = 1; i < cau.length; i++) {
             if (cau[i] === cau[i-1]) {
@@ -92,312 +101,282 @@ class CauNhanDien {
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 2: PHÂN TÍCH CẦU
+// THUẬT TOÁN CON 2: PHÂN TÍCH CẦU (CÂN BẰNG)
 // ============================================================================
 class CauPhanTich {
     constructor(data, cauInfo) {
         this.data = data;
         this.cauInfo = cauInfo;
-        this.ketQuaPhanTich = {};
+        this.ketQua = {};
     }
 
     phanTich() {
         const size = this.data.length;
         if (size < 10) return {};
 
-        // Phân tích tần suất xuất hiện của cầu
-        const tanSuatCau = {};
-        for (let i = 0; i < size - 1; i++) {
-            const key = `${this.data[i].side}-${this.data[i+1].side}`;
-            tanSuatCau[key] = (tanSuatCau[key] || 0) + 1;
-        }
+        // Phân tích tần suất
+        const tanSuat = { TAI: 0, XIU: 0 };
+        this.data.forEach(d => {
+            tanSuat[d.side] = (tanSuat[d.side] || 0) + 1;
+        });
 
-        // Phân tích độ dài cầu trung bình
-        let tongDoDai = 0;
-        let soCau = 0;
-        let doDaiHienTai = 1;
-        
-        for (let i = 1; i < size; i++) {
-            if (this.data[i].side === this.data[i-1].side) {
-                doDaiHienTai++;
+        // Phân tích cầu dài nhất
+        let maxStreakTai = 0;
+        let maxStreakXiu = 0;
+        let currentStreakTai = 0;
+        let currentStreakXiu = 0;
+
+        for (let i = 0; i < size; i++) {
+            if (this.data[i].side === 'TAI') {
+                currentStreakTai++;
+                currentStreakXiu = 0;
+                maxStreakTai = Math.max(maxStreakTai, currentStreakTai);
             } else {
-                tongDoDai += doDaiHienTai;
-                soCau++;
-                doDaiHienTai = 1;
-            }
-        }
-        tongDoDai += doDaiHienTai;
-        soCau++;
-
-        // Phân tích xác suất cầu tiếp theo
-        const cauHienTai = this.cauInfo.cauHienTai;
-        const doDaiCauHienTai = cauHienTai.length;
-        const sideHienTai = cauHienTai[0];
-
-        // Thống kê cầu tương tự trong quá khứ
-        let cauTuongTu = [];
-        for (let i = 0; i <= size - doDaiCauHienTai - 1; i++) {
-            let giongNhau = true;
-            for (let j = 0; j < doDaiCauHienTai; j++) {
-                if (this.data[i+j].side !== cauHienTai[j]) {
-                    giongNhau = false;
-                    break;
-                }
-            }
-            if (giongNhau) {
-                cauTuongTu.push(this.data[i + doDaiCauHienTai].side);
+                currentStreakXiu++;
+                currentStreakTai = 0;
+                maxStreakXiu = Math.max(maxStreakXiu, currentStreakXiu);
             }
         }
 
-        // Dự đoán cầu tiếp theo
-        let duDoan = null;
-        let doTinCay = 0;
-        if (cauTuongTu.length > 0) {
-            const taiCount = cauTuongTu.filter(s => s === 'TAI').length;
-            const xiuCount = cauTuongTu.filter(s => s === 'XIU').length;
-            duDoan = taiCount > xiuCount ? 'TAI' : (xiuCount > taiCount ? 'XIU' : 'CAN_BANG');
-            doTinCay = Math.max(taiCount, xiuCount) / cauTuongTu.length;
+        // Phân tích xu hướng
+        let xuHuong = 0;
+        for (let i = 1; i < Math.min(20, size); i++) {
+            if (this.data[size - i].side === this.data[size - i - 1].side) {
+                xuHuong++;
+            } else {
+                xuHuong--;
+            }
         }
 
-        this.ketQuaPhanTich = {
-            tanSuatCau: tanSuatCau,
-            doDaiTrungBinh: tongDoDai / soCau,
-            soCau: soCau,
-            cauTuongTu: cauTuongTu,
-            duDoanCauTiep: duDoan,
-            doTinCayCau: doTinCay,
-            doDaiCauHienTai: doDaiCauHienTai
+        // Cân bằng - đánh giá khách quan
+        const chenhLech = Math.abs(tanSuat.TAI - tanSuat.XIU) / size;
+        const doOnDinh = 1 - (Math.abs(maxStreakTai - maxStreakXiu) / Math.max(size, 1));
+
+        let duDoan = 'CAN_BANG';
+        if (chenhLech > 0.2) {
+            duDoan = tanSuat.TAI > tanSuat.XIU ? 'TAI' : 'XIU';
+        }
+
+        this.ketQua = {
+            tanSuat: tanSuat,
+            tyLeTai: tanSuat.TAI / size,
+            tyLeXiu: tanSuat.XIU / size,
+            maxStreakTai: maxStreakTai,
+            maxStreakXiu: maxStreakXiu,
+            xuHuong: xuHuong,
+            chenhLech: chenhLech,
+            doOnDinh: doOnDinh,
+            duDoan: duDoan
         };
 
-        return this.ketQuaPhanTich;
+        return this.ketQua;
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 3: ĐỐI CHIẾU CẦU
+// THUẬT TOÁN CON 3: ĐỐI CHIẾU CẦU (CÂN BẰNG)
 // ============================================================================
 class CauDoiChieu {
-    constructor(data, cauInfo, phanTichCau) {
+    constructor(data) {
         this.data = data;
-        this.cauInfo = cauInfo;
-        this.phanTichCau = phanTichCau;
     }
 
     doiChieu() {
         const size = this.data.length;
         if (size < 20) return {};
 
-        // Đối chiếu với dữ liệu lịch sử
-        const lichSuCau = {};
-        const cauHienTai = this.cauInfo.cauHienTai;
-        const doDaiCau = cauHienTai.length;
+        // So sánh các khung thời gian
+        const khung = [5, 10, 15, 20, 30];
+        const ketQua = {};
 
-        // Tìm các cầu tương tự trong 100 phiên gần nhất
-        const cauTrungKhop = [];
-        const startIndex = Math.max(0, size - 100);
-        
-        for (let i = startIndex; i <= size - doDaiCau - 1; i++) {
-            let khop = true;
-            for (let j = 0; j < doDaiCau; j++) {
-                if (this.data[i+j].side !== cauHienTai[j]) {
-                    khop = false;
-                    break;
-                }
+        khung.forEach(k => {
+            if (size >= k) {
+                const dataKhung = this.data.slice(-k);
+                const tai = dataKhung.filter(d => d.side === 'TAI').length;
+                const xiu = dataKhung.filter(d => d.side === 'XIU').length;
+                ketQua[`khung_${k}`] = {
+                    tai: tai,
+                    xiu: xiu,
+                    tyLeTai: tai / k,
+                    tyLeXiu: xiu / k,
+                    chenhLech: Math.abs(tai - xiu) / k
+                };
             }
-            if (khop) {
-                cauTrungKhop.push({
-                    viTri: i,
-                    ketQuaTiep: this.data[i + doDaiCau].side,
-                    tongTiep: this.data[i + doDaiCau].total
-                });
+        });
+
+        // So sánh với tổng thể
+        const tongTai = this.data.filter(d => d.side === 'TAI').length;
+        const tongXiu = this.data.filter(d => d.side === 'XIU').length;
+        const tyLeTaiTong = tongTai / size;
+        const tyLeXiuTong = tongXiu / size;
+
+        // Đánh giá xu hướng
+        let xuHuong = 'CAN_BANG';
+        let doTinCay = 0;
+
+        if (ketQua.khung_10 && ketQua.khung_20) {
+            const chenhLech10 = ketQua.khung_10.chenhLech;
+            const chenhLech20 = ketQua.khung_20.chenhLech;
+            
+            if (chenhLech10 > 0.3 && chenhLech10 > chenhLech20 * 1.2) {
+                xuHuong = ketQua.khung_10.tai > ketQua.khung_10.xiu ? 'TAI' : 'XIU';
+                doTinCay = chenhLech10;
             }
         }
 
-        // Thống kê kết quả sau cầu trùng khớp
-        let taiSauCau = 0;
-        let xiuSauCau = 0;
-        let tongTrungBinh = 0;
-        
-        cauTrungKhop.forEach(item => {
-            if (item.ketQuaTiep === 'TAI') taiSauCau++;
-            else xiuSauCau++;
-            tongTrungBinh += item.tongTiep;
-        });
-
-        const tyLeTai = cauTrungKhop.length > 0 ? taiSauCau / cauTrungKhop.length : 0;
-        const tyLeXiu = cauTrungKhop.length > 0 ? xiuSauCau / cauTrungKhop.length : 0;
-        tongTrungBinh = cauTrungKhop.length > 0 ? tongTrungBinh / cauTrungKhop.length : 0;
-
         return {
-            cauTrungKhop: cauTrungKhop,
-            soLanTrungKhop: cauTrungKhop.length,
-            tyLeTaiSauCau: tyLeTai,
-            tyLeXiuSauCau: tyLeXiu,
-            tongTrungBinhSauCau: tongTrungBinh,
-            duDoan: tyLeTai > tyLeXiu ? 'TAI' : (tyLeXiu > tyLeTai ? 'XIU' : 'CAN_BANG')
+            ketQuaKhung: ketQua,
+            tongTai: tongTai,
+            tongXiu: tongXiu,
+            tyLeTaiTong: tyLeTaiTong,
+            tyLeXiuTong: tyLeXiuTong,
+            xuHuong: xuHuong,
+            doTinCay: doTinCay
         };
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 4: KIỂM TRA CẦU
+// THUẬT TOÁN CON 4: KIỂM TRA CẦU (CÂN BẰNG)
 // ============================================================================
 class CauKiemTra {
-    constructor(data, cauInfo) {
+    constructor(data) {
         this.data = data;
-        this.cauInfo = cauInfo;
     }
 
     kiemTra() {
         const size = this.data.length;
-        if (size < 10) return {};
+        if (size < 20) return {};
 
-        const cauHienTai = this.cauInfo.cauHienTai;
-        const doDaiCau = cauHienTai.length;
+        // Kiểm tra độ tin cậy
+        let dungTai = 0;
+        let dungXiu = 0;
+        let tongKiemTra = 0;
 
-        // Kiểm tra độ tin cậy của cầu
-        let doTinCay = 0;
-        let doChinhXac = 0;
-        let tyLeThang = 0;
+        for (let i = 2; i < size; i++) {
+            const truoc = this.data[i-2].side;
+            const giua = this.data[i-1].side;
+            const sau = this.data[i].side;
 
-        // Kiểm tra các thông số
-        const tanSuatXuatHien = {};
-        for (let i = 0; i < size - 1; i++) {
-            const key = `${this.data[i].side}-${this.data[i+1].side}`;
-            tanSuatXuatHien[key] = (tanSuatXuatHien[key] || 0) + 1;
-        }
-
-        // Kiểm tra cầu hiện tại
-        let kiemTraCau = [];
-        for (let i = 0; i < size - doDaiCau; i++) {
-            let khop = true;
-            for (let j = 0; j < doDaiCau; j++) {
-                if (this.data[i+j].side !== cauHienTai[j]) {
-                    khop = false;
-                    break;
+            // Dự đoán đơn giản: nếu 2 phiên trước cùng loại
+            if (truoc === giua) {
+                tongKiemTra++;
+                if (sau === truoc) {
+                    if (sau === 'TAI') dungTai++;
+                    else dungXiu++;
                 }
             }
-            if (khop) {
-                kiemTraCau.push({
-                    viTri: i,
-                    ketQua: this.data[i + doDaiCau].side,
-                    tong: this.data[i + doDaiCau].total
-                });
-            }
         }
 
-        // Đánh giá độ tin cậy
-        if (kiemTraCau.length > 0) {
-            const dung = kiemTraCau.filter(k => {
-                const duDoan = k.ketQua === 'TAI' ? 'TAI' : 'XIU';
-                return duDoan === k.ketQua;
-            }).length;
-            doChinhXac = dung / kiemTraCau.length;
-            
-            const taiCount = kiemTraCau.filter(k => k.ketQua === 'TAI').length;
-            const xiuCount = kiemTraCau.filter(k => k.ketQua === 'XIU').length;
-            tyLeThang = Math.max(taiCount, xiuCount) / kiemTraCau.length;
-            doTinCay = (doChinhXac + tyLeThang) / 2;
-        }
+        // Đánh giá độ chính xác
+        const doChinhXac = tongKiemTra > 0 ? (dungTai + dungXiu) / tongKiemTra : 0;
+        const doChinhXacTai = tongKiemTra > 0 ? dungTai / tongKiemTra : 0;
+        const doChinhXacXiu = tongKiemTra > 0 ? dungXiu / tongKiemTra : 0;
 
-        // Kiểm tra độ ổn định
-        let doOnDinh = 0;
-        if (kiemTraCau.length > 1) {
-            let bienDong = 0;
-            for (let i = 1; i < kiemTraCau.length; i++) {
-                bienDong += Math.abs(kiemTraCau[i].tong - kiemTraCau[i-1].tong);
-            }
-            doOnDinh = 1 - (bienDong / (kiemTraCau.length - 1) / 6);
-        }
+        // Kiểm tra phân phối
+        const phanPhoi = { TAI: 0, XIU: 0 };
+        this.data.forEach(d => {
+            phanPhoi[d.side]++;
+        });
+
+        const canBang = Math.abs(phanPhoi.TAI - phanPhoi.XIU) / size;
 
         return {
-            doTinCay: doTinCay,
             doChinhXac: doChinhXac,
-            tyLeThang: tyLeThang,
-            doOnDinh: doOnDinh,
-            soLanKiemTra: kiemTraCau.length,
-            kiemTraCau: kiemTraCau,
-            danhGia: doTinCay > 0.7 ? 'CAU_MANH' : (doTinCay > 0.5 ? 'CAU_TRUNG_BINH' : 'CAU_YEU')
+            doChinhXacTai: doChinhXacTai,
+            doChinhXacXiu: doChinhXacXiu,
+            tongKiemTra: tongKiemTra,
+            phanPhoi: phanPhoi,
+            canBang: canBang,
+            danhGia: canBang < 0.15 ? 'CAN_BANG' : (phanPhoi.TAI > phanPhoi.XIU ? 'THIEN_TAI' : 'THIEN_XIU')
         };
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 5: HỌC CẦU
+// THUẬT TOÁN CON 5: HỌC CẦU (CÂN BẰNG)
 // ============================================================================
 class CauHoc {
     constructor(data) {
         this.data = data;
-        this.mauHoc = [];
-        this.mauDuDoan = [];
+        this.mauHoc = {};
     }
 
     hoc() {
         const size = this.data.length;
         if (size < 30) return {};
 
-        // Học các mẫu cầu
-        const doDaiMau = [3, 4, 5, 6];
-        const mauHoc = {};
-
-        doDaiMau.forEach(doDai => {
-            const mau = {};
-            for (let i = 0; i <= size - doDai - 1; i++) {
-                const key = this.data.slice(i, i + doDai).map(d => d.side).join('-');
-                const next = this.data[i + doDai].side;
-                if (!mau[key]) {
-                    mau[key] = { tai: 0, xiu: 0, tong: 0 };
-                }
-                if (next === 'TAI') mau[key].tai++;
-                else mau[key].xiu++;
-                mau[key].tong++;
+        // Học mẫu 3 phiên
+        const mau3 = {};
+        for (let i = 0; i < size - 3; i++) {
+            const key = `${this.data[i].side}-${this.data[i+1].side}-${this.data[i+2].side}`;
+            if (!mau3[key]) {
+                mau3[key] = { tai: 0, xiu: 0, tong: 0 };
             }
-            mauHoc[`doDai_${doDai}`] = mau;
-        });
-
-        // Học các quy luật
-        const quyLuat = {};
-        for (let i = 2; i < size; i++) {
-            const key = `${this.data[i-2].side}-${this.data[i-1].side}-${this.data[i].side}`;
-            if (!quyLuat[key]) quyLuat[key] = { tai: 0, xiu: 0 };
-            if (this.data[i].side === 'TAI') quyLuat[key].tai++;
-            else quyLuat[key].xiu++;
+            if (this.data[i+2].side === 'TAI') mau3[key].tai++;
+            else mau3[key].xiu++;
+            mau3[key].tong++;
         }
 
-        // Học từ dữ liệu mới nhất
-        const cauHienTai = this.data.slice(-6).map(d => d.side);
-        let duDoan = null;
+        // Học mẫu 4 phiên
+        const mau4 = {};
+        for (let i = 0; i < size - 4; i++) {
+            const key = `${this.data[i].side}-${this.data[i+1].side}-${this.data[i+2].side}-${this.data[i+3].side}`;
+            if (!mau4[key]) {
+                mau4[key] = { tai: 0, xiu: 0, tong: 0 };
+            }
+            if (this.data[i+3].side === 'TAI') mau4[key].tai++;
+            else mau4[key].xiu++;
+            mau4[key].tong++;
+        }
+
+        // Tìm mẫu hiện tại
+        const cauHienTai3 = this.data.slice(-3).map(d => d.side).join('-');
+        const cauHienTai4 = this.data.slice(-4).map(d => d.side).join('-');
+
+        let duDoan3 = null;
+        let duDoan4 = null;
+
+        if (mau3[cauHienTai3]) {
+            const m = mau3[cauHienTai3];
+            duDoan3 = m.tai > m.xiu ? 'TAI' : (m.xiu > m.tai ? 'XIU' : 'CAN_BANG');
+        }
+
+        if (mau4[cauHienTai4]) {
+            const m = mau4[cauHienTai4];
+            duDoan4 = m.tai > m.xiu ? 'TAI' : (m.xiu > m.tai ? 'XIU' : 'CAN_BANG');
+        }
+
+        // Cân bằng kết quả
+        let duDoan = 'CAN_BANG';
         let doTinCay = 0;
 
-        // Tìm mẫu phù hợp nhất
-        for (let doDai = 3; doDai <= 6; doDai++) {
-            if (cauHienTai.length >= doDai) {
-                const key = cauHienTai.slice(-doDai).join('-');
-                const mau = mauHoc[`doDai_${doDai}`];
-                if (mau && mau[key]) {
-                    const tyLeTai = mau[key].tai / mau[key].tong;
-                    const tyLeXiu = mau[key].xiu / mau[key].tong;
-                    if (Math.max(tyLeTai, tyLeXiu) > doTinCay) {
-                        doTinCay = Math.max(tyLeTai, tyLeXiu);
-                        duDoan = tyLeTai > tyLeXiu ? 'TAI' : 'XIU';
-                    }
-                }
+        if (duDoan3 && duDoan4) {
+            if (duDoan3 === duDoan4 && duDoan3 !== 'CAN_BANG') {
+                duDoan = duDoan3;
+                doTinCay = 0.7;
             }
+        } else if (duDoan3 && duDoan3 !== 'CAN_BANG') {
+            duDoan = duDoan3;
+            doTinCay = 0.5;
+        } else if (duDoan4 && duDoan4 !== 'CAN_BANG') {
+            duDoan = duDoan4;
+            doTinCay = 0.5;
         }
 
-        this.mauHoc = mauHoc;
-        this.mauDuDoan = {
+        this.mauHoc = {
+            mau3: mau3,
+            mau4: mau4,
             duDoan: duDoan,
-            doTinCay: doTinCay,
-            soMauHoc: Object.keys(mauHoc).length
+            doTinCay: doTinCay
         };
 
-        return this.mauDuDoan;
+        return this.mauHoc;
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 6: PHÂN TÍCH CÁC XUẤT
+// THUẬT TOÁN CON 6: PHÂN TÍCH XUẤT (CÂN BẰNG)
 // ============================================================================
 class PhanTichXuat {
     constructor(data) {
@@ -408,69 +387,68 @@ class PhanTichXuat {
         const size = this.data.length;
         if (size < 20) return {};
 
-        // Phân tích các xuất hiện của Tài/Xỉu
-        const xuatHien = {
-            tai: [],
-            xiu: []
-        };
+        // Phân tích khoảng cách xuất hiện
+        let viTriTai = [];
+        let viTriXiu = [];
 
-        for (let i = 0; i < size; i++) {
-            if (this.data[i].side === 'TAI') {
-                xuatHien.tai.push(i);
-            } else {
-                xuatHien.xiu.push(i);
+        this.data.forEach((d, index) => {
+            if (d.side === 'TAI') viTriTai.push(index);
+            else viTriXiu.push(index);
+        });
+
+        // Khoảng cách trung bình
+        let khoangCachTai = [];
+        let khoangCachXiu = [];
+
+        for (let i = 1; i < viTriTai.length; i++) {
+            khoangCachTai.push(viTriTai[i] - viTriTai[i-1]);
+        }
+        for (let i = 1; i < viTriXiu.length; i++) {
+            khoangCachXiu.push(viTriXiu[i] - viTriXiu[i-1]);
+        }
+
+        const avgKhoangCachTai = khoangCachTai.length > 0 ? 
+            khoangCachTai.reduce((s, c) => s + c, 0) / khoangCachTai.length : 0;
+        const avgKhoangCachXiu = khoangCachXiu.length > 0 ? 
+            khoangCachXiu.reduce((s, c) => s + c, 0) / khoangCachXiu.length : 0;
+
+        // Dự đoán xuất tiếp theo
+        let duDoan = 'CAN_BANG';
+        let doTinCay = 0;
+
+        if (avgKhoangCachTai > 0 && avgKhoangCachXiu > 0) {
+            const lastTai = viTriTai[viTriTai.length - 1];
+            const lastXiu = viTriXiu[viTriXiu.length - 1];
+            const currentPos = size - 1;
+
+            const nextTai = lastTai + avgKhoangCachTai;
+            const nextXiu = lastXiu + avgKhoangCachXiu;
+
+            const distanceToTai = nextTai - currentPos;
+            const distanceToXiu = nextXiu - currentPos;
+
+            if (distanceToTai < distanceToXiu && distanceToTai > 0) {
+                duDoan = 'TAI';
+                doTinCay = 1 - (distanceToTai / Math.max(avgKhoangCachTai, avgKhoangCachXiu));
+            } else if (distanceToXiu < distanceToTai && distanceToXiu > 0) {
+                duDoan = 'XIU';
+                doTinCay = 1 - (distanceToXiu / Math.max(avgKhoangCachTai, avgKhoangCachXiu));
             }
         }
 
-        // Khoảng cách giữa các lần xuất hiện
-        const khoangCachTai = [];
-        const khoangCachXiu = [];
-        
-        for (let i = 1; i < xuatHien.tai.length; i++) {
-            khoangCachTai.push(xuatHien.tai[i] - xuatHien.tai[i-1]);
-        }
-        for (let i = 1; i < xuatHien.xiu.length; i++) {
-            khoangCachXiu.push(xuatHien.xiu[i] - xuatHien.xiu[i-1]);
-        }
-
-        // Tính tần suất xuất hiện
-        const tanSuatTai = xuatHien.tai.length / size;
-        const tanSuatXiu = xuatHien.xiu.length / size;
-
-        // Dự đoán lần xuất hiện tiếp theo
-        let duDoanXuatTiep = null;
-        let khoangCachTrungBinh = 0;
-
-        if (khoangCachTai.length > 0 && khoangCachXiu.length > 0) {
-            const avgTai = khoangCachTai.reduce((s, c) => s + c, 0) / khoangCachTai.length;
-            const avgXiu = khoangCachXiu.reduce((s, c) => s + c, 0) / khoangCachXiu.length;
-            
-            const lastTai = xuatHien.tai[xuatHien.tai.length - 1];
-            const lastXiu = xuatHien.xiu[xuatHien.xiu.length - 1];
-            const currentPos = size - 1;
-
-            const nextTai = lastTai + avgTai;
-            const nextXiu = lastXiu + avgXiu;
-            
-            duDoanXuatTiep = nextTai < nextXiu ? 'TAI' : 'XIU';
-            khoangCachTrungBinh = (avgTai + avgXiu) / 2;
-        }
-
         return {
-            tongXuatTai: xuatHien.tai.length,
-            tongXuatXiu: xuatHien.xiu.length,
-            tanSuatTai: tanSuatTai,
-            tanSuatXiu: tanSuatXiu,
-            khoangCachTai: khoangCachTai,
-            khoangCachXiu: khoangCachXiu,
-            duDoanXuatTiep: duDoanXuatTiep,
-            khoangCachTrungBinh: khoangCachTrungBinh
+            soLuongTai: viTriTai.length,
+            soLuongXiu: viTriXiu.length,
+            avgKhoangCachTai: avgKhoangCachTai,
+            avgKhoangCachXiu: avgKhoangCachXiu,
+            duDoan: duDoan,
+            doTinCay: doTinCay
         };
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 7: PHÂN TÍCH ĐIỂM RƠI
+// THUẬT TOÁN CON 7: PHÂN TÍCH ĐIỂM RƠI (CÂN BẰNG)
 // ============================================================================
 class PhanTichDiemRoi {
     constructor(data) {
@@ -479,73 +457,61 @@ class PhanTichDiemRoi {
 
     phanTich() {
         const size = this.data.length;
-        if (size < 10) return {};
+        if (size < 20) return {};
 
-        // Phân tích điểm rơi của tổng điểm
-        const diemRoi = {};
+        // Phân tích tổng điểm
+        const tongDiem = this.data.map(d => d.total);
+        const avg = tongDiem.reduce((s, c) => s + c, 0) / size;
+        
+        // Phân phối điểm
+        const phanPhoiDiem = {};
         for (let i = 3; i <= 18; i++) {
-            diemRoi[i] = 0;
+            phanPhoiDiem[i] = 0;
         }
-
         this.data.forEach(d => {
-            diemRoi[d.total] = (diemRoi[d.total] || 0) + 1;
+            phanPhoiDiem[d.total] = (phanPhoiDiem[d.total] || 0) + 1;
         });
 
-        // Tìm điểm rơi nhiều nhất
+        // Tìm điểm xuất hiện nhiều
         let maxCount = 0;
         let maxDiem = 3;
         for (let i = 3; i <= 18; i++) {
-            if (diemRoi[i] > maxCount) {
-                maxCount = diemRoi[i];
+            if (phanPhoiDiem[i] > maxCount) {
+                maxCount = phanPhoiDiem[i];
                 maxDiem = i;
             }
         }
 
-        // Phân tích điểm rơi trong 10 phiên gần nhất
-        const diemRoiGan = {};
-        const last10 = this.data.slice(-10);
-        last10.forEach(d => {
-            diemRoiGan[d.total] = (diemRoiGan[d.total] || 0) + 1;
-        });
-
-        let maxGanCount = 0;
-        let maxGanDiem = 3;
-        for (let i = 3; i <= 18; i++) {
-            if (diemRoiGan[i] > maxGanCount) {
-                maxGanCount = diemRoiGan[i];
-                maxGanDiem = i;
-            }
-        }
-
-        // Dự đoán điểm rơi tiếp theo
-        let duDoanDiem = null;
-        if (maxGanCount >= 2) {
-            duDoanDiem = maxGanDiem;
-        } else {
-            duDoanDiem = maxDiem;
-        }
-
         // Phân tích xu hướng điểm
-        const xuHuongDiem = [];
-        for (let i = 1; i < size; i++) {
-            xuHuongDiem.push(this.data[i].total - this.data[i-1].total);
+        let xuHuongDiem = 0;
+        for (let i = 1; i < Math.min(15, size); i++) {
+            xuHuongDiem += this.data[size - i].total - this.data[size - i - 1].total;
         }
-        const trungBinhXuHuong = xuHuongDiem.reduce((s, c) => s + c, 0) / xuHuongDiem.length;
+        xuHuongDiem = xuHuongDiem / Math.min(15, size);
+
+        // Dự đoán điểm tiếp theo
+        const lastTotal = this.data[size - 1].total;
+        let duDoanDiem = Math.round(lastTotal + xuHuongDiem);
+        duDoanDiem = Math.max(3, Math.min(18, duDoanDiem));
+
+        // Chuyển đổi điểm thành Tài/Xỉu (cân bằng)
+        let duDoan = 'CAN_BANG';
+        if (duDoanDiem >= 11) duDoan = 'TAI';
+        else if (duDoanDiem <= 10) duDoan = 'XIU';
 
         return {
-            diemRoi: diemRoi,
-            diemRoiGan: diemRoiGan,
-            diemXuatHienNhieuNhat: maxDiem,
-            diemGanXuatHienNhieuNhat: maxGanDiem,
+            avgDiem: avg,
+            maxDiem: maxDiem,
+            maxCount: maxCount,
+            xuHuongDiem: xuHuongDiem,
             duDoanDiem: duDoanDiem,
-            trungBinhXuHuong: trungBinhXuHuong,
-            xuHuongDiem: xuHuongDiem
+            duDoan: duDoan
         };
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 8: PHÂN TÍCH CHUẨN CỐT LÕI
+// THUẬT TOÁN CON 8: PHÂN TÍCH CHUẨN (CÂN BẰNG)
 // ============================================================================
 class PhanTichChuan {
     constructor(data) {
@@ -556,13 +522,15 @@ class PhanTichChuan {
         const size = this.data.length;
         if (size < 30) return {};
 
-        // Phân tích chuẩn cốt lõi
+        // Thống kê cơ bản
         const tongDiem = this.data.map(d => d.total);
         const trungBinh = tongDiem.reduce((s, c) => s + c, 0) / size;
+        
+        // Phương sai và độ lệch chuẩn
         const phuongSai = tongDiem.reduce((s, c) => s + Math.pow(c - trungBinh, 2), 0) / size;
         const doLechChuan = Math.sqrt(phuongSai);
 
-        // Phân tích phân phối
+        // Phân phối chuẩn
         const phanPhoi = {};
         for (let i = 3; i <= 18; i++) {
             phanPhoi[i] = 0;
@@ -571,90 +539,54 @@ class PhanTichChuan {
             phanPhoi[d.total] = (phanPhoi[d.total] || 0) + 1;
         });
 
-        // Tìm ngưỡng
-        let nguongCao = 0;
-        let nguongThap = 0;
-        for (let i = 3; i <= 18; i++) {
-            if (phanPhoi[i] > 0) {
-                if (nguongThap === 0) nguongThap = i;
-                nguongCao = i;
-            }
+        // Đánh giá độ lệch
+        let lechTai = 0;
+        let lechXiu = 0;
+        for (let i = 3; i <= 10; i++) {
+            lechXiu += phanPhoi[i];
+        }
+        for (let i = 11; i <= 18; i++) {
+            lechTai += phanPhoi[i];
         }
 
-        // Phân tích chu kỳ
-        const chuKy = [];
-        for (let i = 1; i < size; i++) {
-            if (this.data[i].side !== this.data[i-1].side) {
-                chuKy.push(i);
-            }
+        const tyLeTai = lechTai / size;
+        const tyLeXiu = lechXiu / size;
+        const chenhLech = Math.abs(tyLeTai - tyLeXiu);
+
+        let duDoan = 'CAN_BANG';
+        if (chenhLech > 0.2) {
+            duDoan = tyLeTai > tyLeXiu ? 'TAI' : 'XIU';
         }
-
-        const chuKyTrungBinh = chuKy.length > 0 ? 
-            chuKy.reduce((s, c, idx) => {
-                if (idx === 0) return s;
-                return s + (c - chuKy[idx-1]);
-            }, 0) / (chuKy.length - 1) : 0;
-
-        // Đánh giá độ ổn định
-        const doOnDinh = 1 - (doLechChuan / trungBinh);
 
         return {
             trungBinh: trungBinh,
-            phuongSai: phuongSai,
             doLechChuan: doLechChuan,
-            nguongCao: nguongCao,
-            nguongThap: nguongThap,
-            phanPhoi: phanPhoi,
-            chuKyTrungBinh: chuKyTrungBinh,
-            doOnDinh: doOnDinh,
-            danhGia: doOnDinh > 0.8 ? 'ON_DINH_CAO' : (doOnDinh > 0.6 ? 'ON_DINH_TRUNG_BINH' : 'ON_DINH_THAP')
+            tyLeTai: tyLeTai,
+            tyLeXiu: tyLeXiu,
+            chenhLech: chenhLech,
+            duDoan: duDoan,
+            doOnDinh: 1 - (doLechChuan / trungBinh)
         };
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 9: PHÂN TÍCH ALL CẦU
+// THUẬT TOÁN CON 9: PHÂN TÍCH ALL CẦU (CÂN BẰNG)
 // ============================================================================
 class PhanTichAllCau {
     constructor(data) {
         this.data = data;
-        this.allCau = [];
     }
 
     phanTich() {
         const size = this.data.length;
         if (size < 30) return {};
 
-        // Phân tích tất cả các loại cầu
-        const cauDon = [];
-        const cauDanXen = [];
-        const cauPhoiHop = [];
-        const cauDacBiet = [];
-
-        for (let i = 0; i < size - 2; i++) {
-            const a = this.data[i].side;
-            const b = this.data[i+1].side;
-            const c = this.data[i+2].side;
-
-            // Cầu đơn (cùng loại)
-            if (a === b && b === c) {
-                cauDon.push({ viTri: i, loai: a, doDai: 3 });
-            }
-
-            // Cầu đan xen
-            if (a !== b && b !== c && a !== c) {
-                cauDanXen.push({ viTri: i, loai: 'DAN_XEN' });
-            }
-
-            // Cầu đặc biệt (bão)
-            if (this.data[i].isTriple && this.data[i+1].isTriple && this.data[i+2].isTriple) {
-                cauDacBiet.push({ viTri: i, loai: 'BAO' });
-            }
-        }
-
-        // Phân tích cầu dài
-        let cauDaiNhat = [];
+        // Phân tích tất cả cầu
+        const cauTai = [];
+        const cauXiu = [];
         let cauHienTai = [];
+
         for (let i = 0; i < size; i++) {
             if (i === 0) {
                 cauHienTai.push(this.data[i].side);
@@ -662,37 +594,61 @@ class PhanTichAllCau {
                 if (this.data[i].side === this.data[i-1].side) {
                     cauHienTai.push(this.data[i].side);
                 } else {
-                    if (cauHienTai.length > cauDaiNhat.length) {
-                        cauDaiNhat = [...cauHienTai];
+                    if (cauHienTai[0] === 'TAI') {
+                        cauTai.push(cauHienTai.length);
+                    } else {
+                        cauXiu.push(cauHienTai.length);
                     }
                     cauHienTai = [this.data[i].side];
                 }
             }
         }
-        if (cauHienTai.length > cauDaiNhat.length) {
-            cauDaiNhat = [...cauHienTai];
+
+        // Thêm cầu cuối cùng
+        if (cauHienTai.length > 0) {
+            if (cauHienTai[0] === 'TAI') {
+                cauTai.push(cauHienTai.length);
+            } else {
+                cauXiu.push(cauHienTai.length);
+            }
         }
 
-        // Thống kê cầu
-        const thongKeCau = {
-            cauDon: cauDon,
-            cauDanXen: cauDanXen,
-            cauPhoiHop: cauPhoiHop,
-            cauDacBiet: cauDacBiet,
-            cauDaiNhat: cauDaiNhat,
-            doDaiCauDaiNhat: cauDaiNhat.length,
-            loaiCauDaiNhat: cauDaiNhat[0] || 'KHONG_XAC_DINH'
-        };
+        // Thống kê
+        const avgCauTai = cauTai.length > 0 ? 
+            cauTai.reduce((s, c) => s + c, 0) / cauTai.length : 0;
+        const avgCauXiu = cauXiu.length > 0 ? 
+            cauXiu.reduce((s, c) => s + c, 0) / cauXiu.length : 0;
 
-        this.allCau = thongKeCau;
-        return thongKeCau;
+        const maxCauTai = cauTai.length > 0 ? Math.max(...cauTai) : 0;
+        const maxCauXiu = cauXiu.length > 0 ? Math.max(...cauXiu) : 0;
+
+        // Cân bằng đánh giá
+        let duDoan = 'CAN_BANG';
+        let doTinCay = 0;
+
+        const chenhLechDoDai = Math.abs(avgCauTai - avgCauXiu);
+        if (chenhLechDoDai > 1.5) {
+            duDoan = avgCauTai > avgCauXiu ? 'TAI' : 'XIU';
+            doTinCay = Math.min(chenhLechDoDai / 3, 1);
+        }
+
+        return {
+            soCauTai: cauTai.length,
+            soCauXiu: cauXiu.length,
+            avgCauTai: avgCauTai,
+            avgCauXiu: avgCauXiu,
+            maxCauTai: maxCauTai,
+            maxCauXiu: maxCauXiu,
+            duDoan: duDoan,
+            doTinCay: doTinCay
+        };
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CON 10: PHÂN TÍCH DỮ LIỆU BỊ THIẾU
+// THUẬT TOÁN CON 10: PHÂN TÍCH DỮ LIỆU THIẾU (CÂN BẰNG)
 // ============================================================================
-class PhanTichDuLieuThieu {
+class PhanTichThieu {
     constructor(data) {
         this.data = data;
     }
@@ -701,18 +657,14 @@ class PhanTichDuLieuThieu {
         const size = this.data.length;
         if (size < 10) return {};
 
-        // Kiểm tra dữ liệu bị thiếu
-        let duLieuThieu = [];
+        // Kiểm tra dữ liệu thiếu
+        let phienThieu = 0;
         let khoangTrong = [];
-        let phienBiThieu = [];
 
-        // Kiểm tra phiên bị thiếu
         for (let i = 1; i < size; i++) {
             const khoangCach = this.data[i].id - this.data[i-1].id;
             if (khoangCach > 1) {
-                for (let j = 1; j < khoangCach; j++) {
-                    phienBiThieu.push(this.data[i-1].id + j);
-                }
+                phienThieu += khoangCach - 1;
                 khoangTrong.push({
                     tu: this.data[i-1].id,
                     den: this.data[i].id,
@@ -721,57 +673,44 @@ class PhanTichDuLieuThieu {
             }
         }
 
-        // Đánh giá chất lượng dữ liệu
-        const tyLeThieu = phienBiThieu.length / (size + phienBiThieu.length);
+        const tyLeThieu = (size + phienThieu) > 0 ? 
+            phienThieu / (size + phienThieu) : 0;
+
+        // Đánh giá chất lượng
         const chatLuong = 1 - tyLeThieu;
 
-        // Dự đoán dữ liệu bị thiếu
-        let duDoanDuLieuThieu = [];
-        if (khoangTrong.length > 0) {
-            // Sử dụng nội suy tuyến tính
-            khoangTrong.forEach(khoang => {
-                const truoc = this.data.find(d => d.id === khoang.tu);
-                const sau = this.data.find(d => d.id === khoang.den);
-                if (truoc && sau) {
-                    const step = (sau.total - truoc.total) / (khoang.soLuong + 1);
-                    for (let i = 1; i <= khoang.soLuong; i++) {
-                        duDoanDuLieuThieu.push({
-                            phien: truoc.id + i,
-                            tongDuDoan: truoc.total + step * i,
-                            sideDuDoan: (truoc.total + step * i) >= 11 ? 'TAI' : 'XIU'
-                        });
-                    }
-                }
-            });
+        // Điều chỉnh độ tin cậy
+        let dieuChinh = 0;
+        if (chatLuong < 0.7) {
+            dieuChinh = -0.2;
+        } else if (chatLuong > 0.9) {
+            dieuChinh = 0.1;
         }
 
         return {
-            soPhienBiThieu: phienBiThieu.length,
-            phienBiThieu: phienBiThieu,
+            phienThieu: phienThieu,
             khoangTrong: khoangTrong,
             tyLeThieu: tyLeThieu,
-            chatLuongDuLieu: chatLuong,
-            duDoanDuLieuThieu: duDoanDuLieuThieu,
-            danhGia: chatLuong > 0.9 ? 'CHAT_LUONG_CAO' : (chatLuong > 0.7 ? 'CHAT_LUONG_TRUNG_BINH' : 'CHAT_LUONG_THAP')
+            chatLuong: chatLuong,
+            dieuChinh: dieuChinh
         };
     }
 }
 
 // ============================================================================
-// THUẬT TOÁN CHÍNH: TỔNG HỢP 10 THUẬT TOÁN CON
+// THUẬT TOÁN CHÍNH: TỔNG HỢP CÂN BẰNG
 // ============================================================================
 class ThuatToanChinh {
     constructor(historyData) {
         this.rawData = historyData;
         this.processedData = [];
-        this.ketQuaTongHop = {};
+        this.ketQua = {};
         this.initialize();
     }
 
     initialize() {
         this.processData();
-        this.thucHien10ThuatToanCon();
-        this.tongHopKetQua();
+        this.tongHopKhongThienVi();
     }
 
     processData() {
@@ -782,7 +721,7 @@ class ThuatToanChinh {
             return (d1 + d2 + d3) > 0;
         });
 
-        this.processedData = cleanData.slice(-200).reverse().map(item => {
+        this.processedData = cleanData.slice(-150).reverse().map(item => {
             const d1 = parseInt(item.Xuc_cac_1 || item.Xuc_xac_1 || 0);
             const d2 = parseInt(item.Xuc_cac_2 || item.Xuc_xac_2 || 0);
             const d3 = parseInt(item.Xuc_cac_3 || item.Xuc_xac_3 || 0);
@@ -797,81 +736,12 @@ class ThuatToanChinh {
         });
     }
 
-    thucHien10ThuatToanCon() {
+    tongHopKhongThienVi() {
         const data = this.processedData;
         const size = data.length;
 
         if (size < 10) {
-            this.ketQuaTongHop = {
-                prediction: 'XIU',
-                rate: 50,
-                cau: 'CHUA_DU_DU_LIEU',
-                chiTiet: {}
-            };
-            return;
-        }
-
-        // === THUẬT TOÁN CON 1: NHẬN DIỆN CẦU ===
-        const nhanDien = new CauNhanDien(data);
-        const ketQuaNhanDien = nhanDien.nhanDien();
-
-        // === THUẬT TOÁN CON 2: PHÂN TÍCH CẦU ===
-        const phanTichCau = new CauPhanTich(data, ketQuaNhanDien);
-        const ketQuaPhanTichCau = phanTichCau.phanTich();
-
-        // === THUẬT TOÁN CON 3: ĐỐI CHIẾU CẦU ===
-        const doiChieu = new CauDoiChieu(data, ketQuaNhanDien, ketQuaPhanTichCau);
-        const ketQuaDoiChieu = doiChieu.doiChieu();
-
-        // === THUẬT TOÁN CON 4: KIỂM TRA CẦU ===
-        const kiemTra = new CauKiemTra(data, ketQuaNhanDien);
-        const ketQuaKiemTra = kiemTra.kiemTra();
-
-        // === THUẬT TOÁN CON 5: HỌC CẦU ===
-        const hocCau = new CauHoc(data);
-        const ketQuaHoc = hocCau.hoc();
-
-        // === THUẬT TOÁN CON 6: PHÂN TÍCH CÁC XUẤT ===
-        const phanTichXuat = new PhanTichXuat(data);
-        const ketQuaPhanTichXuat = phanTichXuat.phanTich();
-
-        // === THUẬT TOÁN CON 7: PHÂN TÍCH ĐIỂM RƠI ===
-        const phanTichDiemRoi = new PhanTichDiemRoi(data);
-        const ketQuaDiemRoi = phanTichDiemRoi.phanTich();
-
-        // === THUẬT TOÁN CON 8: PHÂN TÍCH CHUẨN CỐT LÕI ===
-        const phanTichChuan = new PhanTichChuan(data);
-        const ketQuaChuan = phanTichChuan.phanTich();
-
-        // === THUẬT TOÁN CON 9: PHÂN TÍCH ALL CẦU ===
-        const phanTichAllCau = new PhanTichAllCau(data);
-        const ketQuaAllCau = phanTichAllCau.phanTich();
-
-        // === THUẬT TOÁN CON 10: PHÂN TÍCH DỮ LIỆU THIẾU ===
-        const phanTichThieu = new PhanTichDuLieuThieu(data);
-        const ketQuaThieu = phanTichThieu.phanTich();
-
-        // Lưu kết quả
-        this.ketQuaTongHop = {
-            thuatToan1_NhanDienCau: ketQuaNhanDien,
-            thuatToan2_PhanTichCau: ketQuaPhanTichCau,
-            thuatToan3_DoiChieuCau: ketQuaDoiChieu,
-            thuatToan4_KiemTraCau: ketQuaKiemTra,
-            thuatToan5_HocCau: ketQuaHoc,
-            thuatToan6_PhanTichXuat: ketQuaPhanTichXuat,
-            thuatToan7_PhanTichDiemRoi: ketQuaDiemRoi,
-            thuatToan8_PhanTichChuan: ketQuaChuan,
-            thuatToan9_PhanTichAllCau: ketQuaAllCau,
-            thuatToan10_PhanTichThieu: ketQuaThieu
-        };
-    }
-
-    tongHopKetQua() {
-        const data = this.ketQuaTongHop;
-        const size = this.processedData.length;
-
-        if (size < 10) {
-            this.ketQuaCuoiCung = {
+            this.ketQua = {
                 prediction: 'XIU',
                 rate: 50,
                 cau: 'CHUA_DU_DU_LIEU'
@@ -879,140 +749,113 @@ class ThuatToanChinh {
             return;
         }
 
-        // === TỔNG HỢP ĐIỂM TỪ 10 THUẬT TOÁN CON ===
-        let diemTai = 0;
-        let diemXiu = 0;
+        // === THỰC HIỆN 10 THUẬT TOÁN CON ===
+        const nhanDien = new CauNhanDien(data);
+        const ketQua1 = nhanDien.nhanDien();
+
+        const phanTichCau = new CauPhanTich(data, ketQua1);
+        const ketQua2 = phanTichCau.phanTich();
+
+        const doiChieu = new CauDoiChieu(data);
+        const ketQua3 = doiChieu.doiChieu();
+
+        const kiemTra = new CauKiemTra(data);
+        const ketQua4 = kiemTra.kiemTra();
+
+        const hocCau = new CauHoc(data);
+        const ketQua5 = hocCau.hoc();
+
+        const phanTichXuat = new PhanTichXuat(data);
+        const ketQua6 = phanTichXuat.phanTich();
+
+        const diemRoi = new PhanTichDiemRoi(data);
+        const ketQua7 = diemRoi.phanTich();
+
+        const chuan = new PhanTichChuan(data);
+        const ketQua8 = chuan.phanTich();
+
+        const allCau = new PhanTichAllCau(data);
+        const ketQua9 = allCau.phanTich();
+
+        const thieu = new PhanTichThieu(data);
+        const ketQua10 = thieu.phanTich();
+
+        // === TỔNG HỢP KHÔNG THIÊN VỊ ===
+        let demTai = 0;
+        let demXiu = 0;
+        let trongSoTai = 0;
+        let trongSoXiu = 0;
         let cacYeuTo = [];
-        let trongSo = 0;
 
-        // 1. Từ thuật toán 1: Nhận diện cầu
-        if (data.thuatToan1_NhanDienCau) {
-            const cau = data.thuatToan1_NhanDienCau;
-            if (cau.cauCuoiCung === 'TAI') {
-                diemTai += cau.doDaiCauHienTai * 1.5;
-                cacYeuTo.push(`Cầu Tài dài ${cau.doDaiCauHienTai} phiên`);
-            } else if (cau.cauCuoiCung === 'XIU') {
-                diemXiu += cau.doDaiCauHienTai * 1.5;
-                cacYeuTo.push(`Cầu Xỉu dài ${cau.doDaiCauHienTai} phiên`);
-            }
-        }
-
-        // 2. Từ thuật toán 2: Phân tích cầu
-        if (data.thuatToan2_PhanTichCau) {
-            const phanTich = data.thuatToan2_PhanTichCau;
-            if (phanTich.duDoanCauTiep === 'TAI') {
-                diemTai += phanTich.doTinCayCau * 20;
-                cacYeuTo.push(`Phân tích cầu: Tài ${Math.round(phanTich.doTinCayCau * 100)}%`);
-            } else if (phanTich.duDoanCauTiep === 'XIU') {
-                diemXiu += phanTich.doTinCayCau * 20;
-                cacYeuTo.push(`Phân tích cầu: Xỉu ${Math.round(phanTich.doTinCayCau * 100)}%`);
-            }
-        }
-
-        // 3. Từ thuật toán 3: Đối chiếu cầu
-        if (data.thuatToan3_DoiChieuCau) {
-            const doiChieu = data.thuatToan3_DoiChieuCau;
-            if (doiChieu.duDoan === 'TAI') {
-                diemTai += doiChieu.tyLeTaiSauCau * 25;
-                cacYeuTo.push(`Đối chiếu: Tài ${Math.round(doiChieu.tyLeTaiSauCau * 100)}%`);
-            } else if (doiChieu.duDoan === 'XIU') {
-                diemXiu += doiChieu.tyLeXiuSauCau * 25;
-                cacYeuTo.push(`Đối chiếu: Xỉu ${Math.round(doiChieu.tyLeXiuSauCau * 100)}%`);
-            }
-        }
-
-        // 4. Từ thuật toán 4: Kiểm tra cầu
-        if (data.thuatToan4_KiemTraCau) {
-            const kiemTra = data.thuatToan4_KiemTraCau;
-            if (kiemTra.danhGia === 'CAU_MANH') {
-                const lastItem = this.processedData[this.processedData.length - 1];
-                if (lastItem.side === 'TAI') {
-                    diemTai += kiemTra.doTinCay * 15;
-                    cacYeuTo.push(`Cầu mạnh Tài ${Math.round(kiemTra.doTinCay * 100)}%`);
-                } else {
-                    diemXiu += kiemTra.doTinCay * 15;
-                    cacYeuTo.push(`Cầu mạnh Xỉu ${Math.round(kiemTra.doTinCay * 100)}%`);
-                }
-            }
-        }
-
-        // 5. Từ thuật toán 5: Học cầu
-        if (data.thuatToan5_HocCau) {
-            const hoc = data.thuatToan5_HocCau;
-            if (hoc.duDoan === 'TAI') {
-                diemTai += hoc.doTinCay * 18;
-                cacYeuTo.push(`Học cầu: Tài ${Math.round(hoc.doTinCay * 100)}%`);
-            } else if (hoc.duDoan === 'XIU') {
-                diemXiu += hoc.doTinCay * 18;
-                cacYeuTo.push(`Học cầu: Xỉu ${Math.round(hoc.doTinCay * 100)}%`);
-            }
-        }
-
-        // 6. Từ thuật toán 6: Phân tích xuất
-        if (data.thuatToan6_PhanTichXuat) {
-            const xuat = data.thuatToan6_PhanTichXuat;
-            if (xuat.duDoanXuatTiep === 'TAI') {
-                diemTai += 15;
-                cacYeuTo.push(`Phân tích xuất: Tài sắp về`);
-            } else if (xuat.duDoanXuatTiep === 'XIU') {
-                diemXiu += 15;
-                cacYeuTo.push(`Phân tích xuất: Xỉu sắp về`);
-            }
-        }
-
-        // 7. Từ thuật toán 7: Phân tích điểm rơi
-        if (data.thuatToan7_PhanTichDiemRoi) {
-            const diemRoi = data.thuatToan7_PhanTichDiemRoi;
-            const lastItem = this.processedData[this.processedData.length - 1];
-            const duDoanDiem = diemRoi.duDoanDiem;
-            
-            if (duDoanDiem >= 11 && lastItem.side === 'TAI') {
-                diemTai += 12;
-                cacYeuTo.push(`Điểm rơi ${duDoanDiem} - Tài`);
-            } else if (duDoanDiem < 11 && lastItem.side === 'XIU') {
-                diemXiu += 12;
-                cacYeuTo.push(`Điểm rơi ${duDoanDiem} - Xỉu`);
-            }
-        }
-
-        // 8. Từ thuật toán 8: Phân tích chuẩn
-        if (data.thuatToan8_PhanTichChuan) {
-            const chuan = data.thuatToan8_PhanTichChuan;
-            const lastItem = this.processedData[this.processedData.length - 1];
-            
-            if (lastItem.total > chuan.nguongCao - 1) {
-                diemXiu += 10;
-                cacYeuTo.push(`Chuẩn: Tổng cao -> Xỉu`);
-            } else if (lastItem.total < chuan.nguongThap + 1) {
-                diemTai += 10;
-                cacYeuTo.push(`Chuẩn: Tổng thấp -> Tài`);
-            }
-        }
-
-        // 9. Từ thuật toán 9: Phân tích all cầu
-        if (data.thuatToan9_PhanTichAllCau) {
-            const allCau = data.thuatToan9_PhanTichAllCau;
-            if (allCau.loaiCauDaiNhat === 'TAI' || allCau.loaiCauDaiNhat === 'XIU') {
-                if (allCau.loaiCauDaiNhat === 'TAI') {
-                    diemTai += 8;
-                    cacYeuTo.push(`All cầu: Tài chiếm ưu thế`);
-                } else {
-                    diemXiu += 8;
-                    cacYeuTo.push(`All cầu: Xỉu chiếm ưu thế`);
-                }
-            }
-        }
-
-        // 10. Từ thuật toán 10: Phân tích dữ liệu thiếu
-        if (data.thuatToan10_PhanTichThieu) {
-            const thieu = data.thuatToan10_PhanTichThieu;
-            if (thieu.chatLuongDuLieu > 0.8) {
-                // Dữ liệu tốt, tăng độ tin cậy
-                cacYeuTo.push(`Dữ liệu chất lượng ${Math.round(thieu.chatLuongDuLieu * 100)}%`);
+        // Hàm cộng điểm cân bằng
+        const congDiem = (duDoan, trongSo, moTa) => {
+            if (duDoan === 'TAI') {
+                demTai++;
+                trongSoTai += trongSo;
+                cacYeuTo.push(`${moTa} (Tài)`);
+            } else if (duDoan === 'XIU') {
+                demXiu++;
+                trongSoXiu += trongSo;
+                cacYeuTo.push(`${moTa} (Xỉu)`);
             } else {
-                // Dữ liệu kém, giảm độ tin cậy
-                cacYeuTo.push(`Dữ liệu ${Math.round(thieu.tyLeThieu * 100)}% thiếu`);
+                // CAN_BANG - không cộng điểm
+                cacYeuTo.push(`${moTa} (Cân bằng)`);
             }
+        };
+
+        // Thuật toán 1: Nhận diện cầu
+        if (ketQua1.duDoan !== 'CAN_BANG') {
+            congDiem(ketQua1.duDoan, ketQua1.doTinCay * 2, 'Nhận diện cầu');
+        }
+
+        // Thuật toán 2: Phân tích cầu
+        if (ketQua2.duDoan !== 'CAN_BANG') {
+            const trongSo = Math.min(ketQua2.chenhLech * 3, 1.5);
+            congDiem(ketQua2.duDoan, trongSo, 'Phân tích cầu');
+        }
+
+        // Thuật toán 3: Đối chiếu
+        if (ketQua3.xuHuong !== 'CAN_BANG') {
+            congDiem(ketQua3.xuHuong, ketQua3.doTinCay * 1.5, 'Đối chiếu cầu');
+        }
+
+        // Thuật toán 4: Kiểm tra
+        if (ketQua4.danhGia !== 'CAN_BANG') {
+            const duDoan = ketQua4.danhGia === 'THIEN_TAI' ? 'TAI' : 'XIU';
+            const trongSo = Math.min(ketQua4.canBang * 2, 1.5);
+            congDiem(duDoan, trongSo, 'Kiểm tra cầu');
+        }
+
+        // Thuật toán 5: Học cầu
+        if (ketQua5.duDoan !== 'CAN_BANG') {
+            congDiem(ketQua5.duDoan, ketQua5.doTinCay * 1.5, 'Học cầu');
+        }
+
+        // Thuật toán 6: Phân tích xuất
+        if (ketQua6.duDoan !== 'CAN_BANG') {
+            congDiem(ketQua6.duDoan, ketQua6.doTinCay * 1.5, 'Phân tích xuất');
+        }
+
+        // Thuật toán 7: Điểm rơi
+        if (ketQua7.duDoan !== 'CAN_BANG') {
+            congDiem(ketQua7.duDoan, 1.2, 'Phân tích điểm rơi');
+        }
+
+        // Thuật toán 8: Chuẩn
+        if (ketQua8.duDoan !== 'CAN_BANG') {
+            const trongSo = Math.min(ketQua8.chenhLech * 3, 1.5);
+            congDiem(ketQua8.duDoan, trongSo, 'Phân tích chuẩn');
+        }
+
+        // Thuật toán 9: All cầu
+        if (ketQua9.duDoan !== 'CAN_BANG') {
+            congDiem(ketQua9.duDoan, ketQua9.doTinCay * 1.5, 'Phân tích all cầu');
+        }
+
+        // Thuật toán 10: Dữ liệu thiếu
+        if (ketQua10.dieuChinh !== 0) {
+            // Điều chỉnh dựa trên chất lượng dữ liệu
+            // Không thêm vào đếm, chỉ điều chỉnh tỉ lệ sau
         }
 
         // === QUYẾT ĐỊNH CUỐI CÙNG ===
@@ -1020,58 +863,83 @@ class ThuatToanChinh {
         let rate = 50;
         let cau = '';
 
-        // Tính tổng điểm
-        const tongDiem = diemTai + diemXiu;
-        
-        if (tongDiem > 0) {
-            const tyLeTai = diemTai / tongDiem;
-            const tyLeXiu = diemXiu / tongDiem;
+        // Tính tổng trọng số
+        const tongTrongSo = trongSoTai + trongSoXiu;
+
+        if (tongTrongSo > 0) {
+            const tyLeTai = trongSoTai / tongTrongSo;
+            const tyLeXiu = trongSoXiu / tongTrongSo;
             
-            if (tyLeTai > tyLeXiu) {
-                prediction = 'TAI';
-                rate = Math.min(50 + Math.round(tyLeTai * 35), 85);
-                rate = Math.max(rate, 53);
-            } else if (tyLeXiu > tyLeTai) {
-                prediction = 'XIU';
-                rate = Math.min(50 + Math.round(tyLeXiu * 35), 85);
-                rate = Math.max(rate, 53);
+            // Chỉ dự đoán khi có sự chênh lệch đủ lớn
+            const chenhLech = Math.abs(tyLeTai - tyLeXiu);
+            
+            if (chenhLech > 0.15) {
+                if (tyLeTai > tyLeXiu) {
+                    prediction = 'TAI';
+                    rate = Math.min(50 + Math.round(chenhLech * 40), 82);
+                } else {
+                    prediction = 'XIU';
+                    rate = Math.min(50 + Math.round(chenhLech * 40), 82);
+                }
             } else {
-                // Hòa, dùng dữ liệu gần nhất
-                const lastItem = this.processedData[this.processedData.length - 1];
-                prediction = lastItem.side;
-                rate = 55;
-                cacYeuTo.push('Hòa điểm -> theo phiên cuối');
+                // Gần cân bằng - dùng thống kê tổng thể
+                const taiCount = data.filter(d => d.side === 'TAI').length;
+                const xiuCount = data.filter(d => d.side === 'XIU').length;
+                const tyLeTaiTong = taiCount / size;
+                const tyLeXiuTong = xiuCount / size;
+                
+                if (Math.abs(tyLeTaiTong - tyLeXiuTong) > 0.1) {
+                    prediction = tyLeTaiTong > tyLeXiuTong ? 'TAI' : 'XIU';
+                    rate = 54;
+                } else {
+                    // Thực sự cân bằng - dùng phiên cuối
+                    const lastSide = data[size - 1].side;
+                    prediction = lastSide;
+                    rate = 52;
+                    cacYeuTo.push('Cân bằng tuyệt đối - theo phiên cuối');
+                }
             }
         } else {
-            // Không có dữ liệu, dùng thống kê đơn giản
-            const taiCount = this.processedData.filter(d => d.side === 'TAI').length;
-            const xiuCount = this.processedData.filter(d => d.side === 'XIU').length;
+            // Không có dữ liệu đủ tin cậy
+            const taiCount = data.filter(d => d.side === 'TAI').length;
+            const xiuCount = data.filter(d => d.side === 'XIU').length;
             prediction = taiCount > xiuCount ? 'TAI' : 'XIU';
-            rate = 53;
-            cacYeuTo.push('Dùng thống kê cơ bản');
+            rate = 51;
+            cacYeuTo.push('Dữ liệu không đủ - dùng thống kê cơ bản');
         }
 
+        // Điều chỉnh theo chất lượng dữ liệu
+        if (ketQua10.dieuChinh < 0) {
+            rate = Math.max(rate - 5, 50);
+            cacYeuTo.push(`Giảm tin cậy do dữ liệu thiếu ${Math.round(ketQua10.tyLeThieu * 100)}%`);
+        }
+
+        // Đảm bảo tỉ lệ trong khoảng hợp lý
+        rate = Math.max(50, Math.min(rate, 82));
+
         // Tạo cầu
-        cau = cacYeuTo.length > 0 ? cacYeuTo.slice(0, 5).join(' | ') : 'KHONG_CO_CAU';
+        cau = cacYeuTo.length > 0 ? cacYeuTo.slice(0, 4).join(' | ') : 'KHONG_CO_CAU';
 
         // Log chi tiết
-        console.log(`[THUẬT TOÁN CHÍNH] Tai: ${diemTai.toFixed(1)}, Xiu: ${diemXiu.toFixed(1)}, Pred: ${prediction}, Rate: ${rate}%`);
+        console.log(`[THUẬT TOÁN CHÍNH] Tài: ${demTai}, Xỉu: ${demXiu}, Pred: ${prediction}, Rate: ${rate}%`);
+        console.log(`[CHI TIẾT] Trọng số Tài: ${trongSoTai.toFixed(2)}, Xỉu: ${trongSoXiu.toFixed(2)}`);
 
-        this.ketQuaCuoiCung = {
+        this.ketQua = {
             prediction: prediction,
             rate: rate,
             cau: cau,
             chiTiet: {
-                diemTai: diemTai,
-                diemXiu: diemXiu,
-                soYeuTo: cacYeuTo.length,
-                allYeuTo: cacYeuTo
+                demTai: demTai,
+                demXiu: demXiu,
+                trongSoTai: trongSoTai,
+                trongSoXiu: trongSoXiu,
+                soYeuTo: cacYeuTo.length
             }
         };
     }
 
     getResults() {
-        return this.ketQuaCuoiCung || {
+        return this.ketQua || {
             prediction: 'XIU',
             rate: 50,
             cau: 'KHONG_CO_DU_LIEU'
@@ -1169,9 +1037,9 @@ Id: @tranhoang2286`;
 });
 
 app.get('/', (req, res) => {
-    res.send("HỆ THỐNG 10 THUẬT TOÁN CON + 1 THUẬT TOÁN CHÍNH - PHÂN TÍCH SIÊU CẤP VIP PRO");
+    res.send("HỆ THỐNG 10 THUẬT TOÁN CON CÂN BẰNG - KHÔNG THIÊN VỊ");
 });
 
 app.listen(PORT, () => {
-    console.log(`[ONLINE] Hệ thống 10 thuật toán con + 1 thuật toán chính đã sẵn sàng trên cổng: ${PORT}`);
+    console.log(`[ONLINE] Hệ thống cân bằng tuyệt đối đã sẵn sàng trên cổng: ${PORT}`);
 });
